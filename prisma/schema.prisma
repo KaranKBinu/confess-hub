@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PostLanguage {
+  en
+  ml
+  hi
+}
+
+enum PostStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum VoteValue {
+  LIKE
+  DISLIKE
+}
+
+model User {
+  id                    String    @id @default(cuid())
+  email                 String    @unique @db.VarChar(320)
+  username              String    @unique @db.VarChar(30)
+  displayName           String    @db.VarChar(40)
+  passwordHash          String
+  role                  UserRole  @default(USER)
+  showUsernameOnPosts   Boolean   @default(false)
+  themePreference       String    @default("light") @db.VarChar(10)
+  createdAt             DateTime  @default(now())
+  comments              Comment[]
+  votes                 Vote[]
+  posts                 Post[]    @relation("PostAuthor")
+}
+
+model Post {
+  id            String        @id @default(cuid())
+  content       String        @db.VarChar(2000)
+  language      PostLanguage
+  anonymousId   String        @db.VarChar(64)
+  status        PostStatus    @default(PENDING)
+  isFlagged     Boolean       @default(false)
+  authorUserId  String?
+  showAuthor    Boolean       @default(false)
+  seriesId      String?       @db.VarChar(64)
+  partIndex     Int           @default(1)
+  partTotal     Int?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  reports       Report[]
+  comments      Comment[]
+  votes         Vote[]
+  author        User?         @relation("PostAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+  trending      TrendingEntry?
+
+  @@index([status, language, createdAt])
+  @@index([isFlagged, createdAt])
+  @@index([seriesId, partIndex])
+}
+
+model TrendingEntry {
+  id        String       @id @default(cuid())
+  postId    String       @unique
+  language  PostLanguage
+  score     Float
+  signals   Json
+  rankedAt  DateTime     @default(now())
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([language, score])
+  @@index([rankedAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  content   String   @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Vote {
+  id        String    @id @default(cuid())
+  postId    String
+  userId    String
+  value     VoteValue
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId, value])
+}
+
+model Report {
+  id                  String   @id @default(cuid())
+  postId              String
+  reporterAnonymousId String   @db.VarChar(64)
+  createdAt           DateTime @default(now())
+  post                Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, reporterAnonymousId])
+  @@index([postId, createdAt])
+}
+
+model ContentFilterToken {
+  id        String       @id @default(cuid())
+  token     String       @db.VarChar(80)
+  language  PostLanguage
+  frequency Int          @default(0)
+  updatedAt DateTime     @updatedAt
+
+  @@unique([token, language])
+  @@index([language, frequency])
+}
